@@ -32,19 +32,26 @@ contract ERC20TokenFactory_V2 is Ownable {
     
     // 映射（铭文合约地址 => 铭文信息结构体）
     mapping(address inscriptionAddr => InscriptionStruct info) public inscriptionInfo;
+    
     // 通过用户铸造铭文而为 DEX 提供流动性所获得的 LP token 的数量（添加流动性所获得的，不包含流动性收益所增发的）
     uint256 private LPAmount_AddingLiquidity;
+    
     // 用户铸造铭文的费用的 ETH 收益
     uint256 private profitOfMint;
+    
     // 用户提供流动性所获得的 ETH 收益
     uint256 private profitOfLP;
+    
     // 当铭文合约创建时触发
     event InscriptionCreated(address instanceAddress);
+    
     // 当铭文被铸造时触发
     event InscriptionMinted(address inscriptAddr, uint256 mintedAmount, uint256 liquidityAdd);
+    
     // 当铭文项目方提取流动性收益时触发（提取收益对应的增发的 LP token 对应的 ETH 和 铭文 token）
     event LiquidityProfitWithdrawn(
         address indexed inscriptAddr, uint256 LPAmount, uint256 indexed tokenAmount, uint256 indexed ETHAmount);
+        
     // 当铭文项目方提取用户铸造费用的 ETH 收益时触发
     event MintingProfitWithdrawn(address owner, uint256 withdrawnAmount);
     
@@ -65,8 +72,10 @@ function deployInscription(
     ) public returns (address) {
         require(_tokenTotalSupply != 0 && _tokenTotalSupply % 2 == 0, "Total Supply should be an even non-zero number");
         require(_perMint != 0 && _perMint % 2 == 0, "Minted amount should be an even non-zero number");
+        
         // 基于实现合约的逻辑，通过最小代理部署的铭文合约
         address clonedImpleInstance = libraryAddress.clone();
+        
         // 使用结构体 InscriptionStruct 变量来记录铭文的基础信息
         InscriptionStruct memory deployedInscription = InscriptionStruct({
             name: _tokenName,
@@ -75,8 +84,10 @@ function deployInscription(
             perMint: _perMint,
             mintFeeInETH: _mintFeeInETH
         });
+        
         // 赋值给状态变量 inscriptionInfo（映射：铭文地址 => 铭文信息结构体）
         inscriptionInfo[clonedImpleInstance] = deployedInscription;
+        
         // 初始化新创建的铭文合约
         FairTokenGFT_V2(clonedImpleInstance).init(address(this), _tokenName, _tokenSymbol);
         emit InscriptionCreated(clonedImpleInstance);
@@ -91,43 +102,55 @@ function deployInscription(
 ```Solidity
 function mintInscription(address _tokenAddr) public payable {
         _beforeMintInscription(_tokenAddr);
+        
         // 计算一半的铸造的铭文数量
         uint256 halfMintedToken = inscriptionInfo[_tokenAddr].perMint / 2;
+        
         // 计算一半的铸造费用
         uint256 halfFee = msg.value / 2;
         uint256 balanceBefore = FairTokenGFT_V2(_tokenAddr).balanceOf(address(this));
+        
         // 为当前合约铸造铭文
         FairTokenGFT_V2(_tokenAddr).mint(address(this), halfMintedToken);
+        
         // 为用户铸造铭文
         FairTokenGFT_V2(_tokenAddr).mint(msg.sender, halfMintedToken);
+        
         // 比较给当前合约铸造的铭文前后余额对比，检查铸造数量
         uint256 balanceAfter = FairTokenGFT_V2(_tokenAddr).balanceOf(address(this));
         if (balanceAfter <= balanceBefore || balanceAfter - balanceBefore != halfMintedToken) {
             uint256 balanceDelta = balanceAfter <= balanceBefore ? 0 : balanceAfter - balanceBefore;
             revert InvalidAmountMintedBack(_tokenAddr, balanceDelta, halfMintedToken);
         }
+        
         // 为 DEX 的 Router 合约（UniswapV2Router02_Customized 合约）授权另一半铭文的铸造数量
         bool isApproved = FairTokenGFT_V2(_tokenAddr).approve(routerAddress, halfMintedToken);
         require(isApproved, "Fail to approve");
+        
         // 将一半数量的新铸造的铭文和一半的铸造费用添加流动性到 DEX 中
         (uint256 amountToken, uint256 amountETH, uint256 liquidity) = UniswapV2Router02_Customized(
             payable(routerAddress)
         ).addLiquidityETH{value: halfFee}(_tokenAddr, halfMintedToken, 0, 0, address(this), block.timestamp + 600);
+        
         // 计算未被加入到流动性中的铭文数量（以供后续返还未注入流动性的铭文给用户）
         uint256 tokenToBeRefunded = halfMintedToken - amountToken;
+        
         // 返还多余的铭文
         if (tokenToBeRefunded > 0) {
             bool _ok = FairTokenGFT_V2(_tokenAddr).transfer(msg.sender, halfMintedToken - amountToken);
             require(_ok, "Fail to refund inscription");
         }
         uint256 ETHToBeRefunded = halfFee - amountETH;
+        
         // 返还多余的 ETH
         if (ETHToBeRefunded > 0) {
             (bool _success,) = payable(msg.sender).call{value: halfFee - amountETH}("");
             require(_success, "Fail to refund ETH");
         }
+        
         // 更新提供流动性所获得的 LP token 的总量
         LPAmount_AddingLiquidity += liquidity;
+        
         // 更新铸造费用的 ETH 总收益
         profitOfMint += halfFee;
         emit InscriptionMinted(_tokenAddr, inscriptionInfo[_tokenAddr].perMint, liquidity);
@@ -163,15 +186,19 @@ function withdrawProfitFromLiquidity(
     ) external onlyOwner returns (uint256 tokenAmount, uint256 ETHAmount) {
     		// 调用父合约 Ownable 方法获取当前铸造工厂的 owner
         address owner = owner();
+        
         // 调用内部方法获取 pair 合约（即 LP token 合约）的地址
         address pair = getPairAddress(_tokenAddr);
+        
         // 调用 LP token 合约的 {approve} 方法为 Router 合约授权（以供 transferFrom LP token 给 router 合约销毁）
         bool isApproved = UniswapV2Pair_Customized(pair).approve(routerAddress, _LPAmountWithdrawn);
         require(isApproved, "Fail to approve router");
+        
         // 调用 Router 合约的 {withdrawProfitFromLiquidityETH} 方法将 LP token 转入并提取对应的收益（币对）
         (tokenAmount, ETHAmount) = UniswapV2Router02_Customized(payable(routerAddress)).withdrawProfitFromLiquidityETH(
             _tokenAddr, _LPAmountWithdrawn, _tokenMin, _ETHMin, address(this), block.timestamp + 600
         );
+        
         // 将提出的流动性收益（两种币：铭文 token 和 ETH）转给铸造工厂的 owner
         bool _ok = FairTokenGFT_V2(_tokenAddr).transfer(owner, tokenAmount);
         require(_ok, "Fail to withdraw token");
@@ -217,10 +244,12 @@ function _beforeMintInscription(address _tokenAddr) internal view {
         uint256 currentTotalSupply = FairTokenGFT_V2(_tokenAddr).totalSupply();
         uint256 amountPerMint = inscriptionInfo[_tokenAddr].perMint;
         uint256 maxSupply = inscriptionInfo[_tokenAddr].totalSupply;】
+ 				
  				// 检查铸造之后的铭文总供应量是否大于限值
         if (currentTotalSupply + amountPerMint > maxSupply) {
             revert ReachMaxSupply(_tokenAddr, currentTotalSupply, amountPerMint, maxSupply);
         }
+        
         // 检查用户给出的铸造费用是否足够
         if (msg.value < inscriptionInfo[_tokenAddr].mintFeeInETH) {
             revert InsufficientETHGiven(msg.sender, msg.value);
@@ -249,32 +278,43 @@ function _beforeMintInscription(address _tokenAddr) internal view {
 
 ```solidity
 function handleLiquidityProfit(address to, uint liquidityAmount) external lock returns (uint amount0Profit, uint amount1Profit) {
+				
 				// 获取两种币（WETH 铭文 token）的上次记录（在 LP token 被 mint、burn、swap 或其他更新时）的储备量
         (uint112 _reserve0, uint112 _reserve1,) = getReserves(); 
+				
 				// 为了节省 gas ，此处用局部变量获取状态变量的值用于后续逻辑
         address _token0 = token0;                                
         address _token1 = token1;
+        
         // 获取当前本合约中的两种 token 的数量
         uint balance0 = IERC20(_token0).balanceOf(address(this));
         uint balance1 = IERC20(_token1).balanceOf(address(this));
+				
 				// 为流动性收益的接收者增发流动性收益对应的 LPtoken
         (bool feeOn, ) = _mintFeeReturned(_reserve0, _reserve1);
+        
         // 为了节省 gas ，此处用局部变量获取 LP token 在增发后的总供应量
         uint _totalSupply = totalSupply; 
+        
         // 基于输入值`liquidityAmount`计算所对应的两种 token 的数量
         amount0Profit = liquidityAmount.mul(balance0) / _totalSupply; 
         amount1Profit = liquidityAmount.mul(balance1) / _totalSupply; 
         require(amount0Profit > 0 && amount1Profit > 0, 'UniswapV2_Customized: INSUFFICIENT_LIQUIDITY');
+				
 				// 基于输入值`liquidityAmount`，销毁相应的 LP token
         _burn(address(this), liquidityAmount);
+        
         // 将两种 token 转入`to`地址
         _safeTransfer(_token0, to, amount0Profit);
         _safeTransfer(_token1, to, amount1Profit);
+				
 				// 更新当前合约内的两种 token 的余额
         balance0 = IERC20(_token0).balanceOf(address(this));
         balance1 = IERC20(_token1).balanceOf(address(this));
+        
         // 更新两种 token 的储备量
         _update(balance0, balance1, _reserve0, _reserve1);
+				
 				// 当流动性存在收益的接收者时，则为状态变量`kLast`更新当前的 K 值（用于下次计算流动性收益的快照）
         if (feeOn) kLast = uint(reserve0).mul(reserve1); 
         emit Burn(msg.sender, amount0Profit, amount1Profit, to);
@@ -325,10 +365,13 @@ function withdrawProfitFromLiquidityETH(
     		// 调用方法{withdrawProfitFromLiquidity}提取铭文 token 和 WETH 到当前合约
         (amountToken, amountETH) =
             withdrawProfitFromLiquidity(token, WETH, liquidity, amountTokenMin, amountETHMin, address(this), deadline);
+        
         // 将提取出的铭文 token 发送给`to`地址（即项目方地址）
         TransferHelper.safeTransfer(token, to, amountToken);
+        
         // 将提取出的 WETH 转为 ETH（仍在本合约内）
         IWETH(WETH).withdraw(amountETH);
+        
         // 将提取出的 ETH 发送给`to`地址（即项目方地址）
         TransferHelper.safeTransferETH(to, amountETH);
     }
@@ -350,18 +393,25 @@ function withdrawProfitFromLiquidity(
     ) public ensure(deadline) returns (uint256 amountA, uint256 amountB) {
     		// 获取 LP token 的合约地址
         address pair = UniswapV2Library_Customized.pairFor(factory, tokenA, tokenB);
+        
         // 计算流动性产生的收益所增发的 LP token 的数量（即可用于提取收益的 LP token 的数量）
         uint256 liquidityAdded = UniswapV2Pair_Customized(pair).estimateFee();
+        
         // 检查输入值`liquidity`是否超过了可用于提取收益的 LP token 的数量
         require(liquidity <= liquidityAdded, "Withdrawal exceeds the current profit of LP");
+        
         // 将 LP token 从调用者地址转移至 LP token 合约地址（需要调用者提前授权当前合约）
         UniswapV2Pair_Customized(pair).transferFrom(msg.sender, pair, liquidity);
+        
         // 调用 LP token 合约中的{handleLiquidityProfit}方法
         (uint256 amount0Earned, uint256 amount1Earned) = UniswapV2Pair_Customized(pair).handleLiquidityProfit(to, liquidity);
+        
         // 为输入的两种 token 的地址做排序，保证两者在做币对时始终拥有唯一的排序（按照地址的大小排序）
         (address token0,) = UniswapV2Library_Customized.sortTokens(tokenA, tokenB);
+        
         // 将两种 token 的提取数量赋值给返回值变量
         (amountA, amountB) = tokenA == token0 ? (amount0Earned, amount1Earned) : (amount1Earned, amount0Earned);
+        
         // 检查两种 token 的提取数量是否能够满足用户输入的最小提取量
         require(amountA >= amountAMin, "UniswapV2Router: INSUFFICIENT_A_AMOUNT");
         require(amountB >= amountBMin, "UniswapV2Router: INSUFFICIENT_B_AMOUNT");
