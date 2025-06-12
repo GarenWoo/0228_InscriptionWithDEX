@@ -4,9 +4,9 @@
 
 ## A. 合约部署信息
 
-- **UniswapV2Factory_Customized**（Uniswap v2 Factory 合约的改写版）：https://sepolia.etherscan.io/address/0xd7aea5f7f6dbc8f7772162ebe1367c1f4d7d377f
+- [**UniswapV2Factory_Customized**](./InscriptionAndFactory/src/Uniswap_v2_core/UniswapV2Factory_Customized.sol)（<u>Uniswap v2 Factory 合约的改写版</u>）：https://sepolia.etherscan.io/address/0xd7aea5f7f6dbc8f7772162ebe1367c1f4d7d377f
 - **WETH9**：https://sepolia.etherscan.io/address/0xebe8d728847fd06179f19070e9288dd207def69d
-- **UniswapV2Router02_Customized**（Uniswap v2 Router02 合约的改写版）：https://sepolia.etherscan.io/address/0x8fcdfaebb375858fbbd3e8987f45ba77c8ee2ec9
+- [**UniswapV2Router02_Customized**](./InscriptionAndFactory/src/Uniswap_v2_periphery/UniswapV2Router02_Customized.sol)（<u>Uniswap v2 Router02 合约的改写版</u>）：https://sepolia.etherscan.io/address/0x8fcdfaebb375858fbbd3e8987f45ba77c8ee2ec9
 - **FairTokenGFT_V2**（铭文的实现合约）：https://sepolia.etherscan.io/address/0x68a2f5be9a4b5ac57e4a8357cbc2cde713239ada
 - **ERC20TokenFactory_V2**（铭文的铸造工厂合约）：https://sepolia.etherscan.io/address/0x888018d0de977d9daafa127303a7ecce01a1e80f
 
@@ -19,8 +19,8 @@
 ### 1. 说明：状态变量 和 事件（仅展示必要内容）
 
 ```solidity
-    address private libraryAddress;		// 实现合约的地址
-    address public routerAddress;			// DEX 的 router 合约地址
+    address private libraryAddress;    // 实现合约的地址
+    address public routerAddress;      // DEX 的 router 合约地址
     
     // 铭文信息结构体
     struct InscriptionStruct {	
@@ -270,8 +270,8 @@ function _beforeMintInscription(address _tokenAddr) internal view {
 
 现基于 **Uniswap V2** 原版代码改写了部分合约，其中包括：
 
-- **UniswapV2Pair** 合约：改写版为 **UniswapV2Pair_Customized** 。
-- **UniswapV2Router02** 合约：改写版为 **UniswapV2Router02_Customized** 。
+- **UniswapV2Pair** 合约：改写版为 [**UniswapV2Pair_Customized**](./InscriptionAndFactory/src/Uniswap_v2_core/UniswapV2Pair_Customized.sol) 。
+- **UniswapV2Router02** 合约：改写版为 [**UniswapV2Router02_Customized**](./InscriptionAndFactory/src/Uniswap_v2_periphery/UniswapV2Router02_Customized.sol) 。
 
 ### 1. UniswapV2Pair_Customized 合约
 
